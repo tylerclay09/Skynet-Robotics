@@ -16,21 +16,13 @@ NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FO
 DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
-// THIS CODE DOES NOT WORK
-// THIS CODE DOES NOT WORK
-// THIS CODE DOES NOT WORK
-// THIS CODE DOES NOT WORK
-// THIS CODE DOES NOT WORK
-
 package org.firstinspires.ftc.teamcode.drive;
 
-import com.qualcomm.hardware.bosch.BNO055IMU;
+import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import org.firstinspires.ftc.robotcore.external.navigation.Orientation;
-import com.qualcomm.hardware.bosch.BNO055IMU;
 import com.qualcomm.robotcore.hardware.Blinker;
 import com.qualcomm.robotcore.hardware.HardwareDevice;
-import com.qualcomm.robotcore.hardware.IMU;
 import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.eventloop.opmode.Disabled;
@@ -38,12 +30,10 @@ import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
+import com.qualcomm.robotcore.hardware.IMU;
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
-import org.firstinspires.ftc.robotcore.external.navigation.AxesOrder;
-import org.firstinspires.ftc.robotcore.external.navigation.AxesReference;
-import org.firstinspires.ftc.robotcore.external.navigation.Orientation;
-import org.firstinspires.ftc.robotcore.external.navigation.Position;
-import org.firstinspires.ftc.robotcore.external.navigation.Velocity;
+import org.firstinspires.ftc.robotcore.external.navigation.AngularVelocity;
+import org.firstinspires.ftc.robotcore.external.navigation.YawPitchRollAngles;
 
 import java.lang.Math;
 
@@ -71,9 +61,11 @@ public class driveTrain extends LinearOpMode {
     private DcMotor frontRight;
     private DcMotor hang;
     private Servo left_hand;
-    private BNO055IMU imu;
-    private Orientation lastAngles = new Orientation();
-    private double globalAngle, power = .30, correction;
+    
+    
+    private IMU imu;
+    
+    
     
     
     
@@ -100,91 +92,93 @@ public class driveTrain extends LinearOpMode {
         hang = hardwareMap.get(DcMotor.class, "hang");
         left_hand = hardwareMap.get(Servo.class, "left_hand");
         
-        BNO055IMU.Parameters parameters = new BNO055IMU.Parameters();
+        imu = hardwareMap.get(IMU.class, "imu");
         
-        parameters.mode = BNO055IMU.SensorMode.IMU;
-        parameters.angleUnit = BNO055IMU.AngleUnit.DEGREES; //Potentially change radians to degrees
-        //parameters.accelUnit = BNO055IMU.AngleUnit.METERS_PERSEC_PERSEC;
-        parameters.loggingEnabled = true;
         
-        imu = hardwareMap.get(BNO055IMU.class, "imu");
-        
-        imu.initialize(parameters);
-        
-        telemetry.addData("Mode", "calibrating...");
-        
-        while(!isStopRequested() && !imu.isGyroCalibrated())
-        {
-            sleep(50);
-            idle();
-        }
-        
-        telemetry.addData("Mode", "waiting for start");
-        telemetry.addData("imu calibration status", imu.getCalibrationStatus().toString());
-        telemetry.update();
-        
-    
+        IMU.Parameters params;
 
+        params = new IMU.Parameters(
+             new RevHubOrientationOnRobot(
+                  RevHubOrientationOnRobot.LogoFacingDirection.UP,
+                  RevHubOrientationOnRobot.UsbFacingDirection.FORWARD
+             )
+        );
+        
+        imu.initialize(params);
+        
+        YawPitchRollAngles robotOrientation;
+        double Yaw;
+        double relativeDirection;
+        
+        
 
         telemetry.addData("Status", "Initialized");
         telemetry.update();
         // Wait for the game to start (driver presses PLAY)
         waitForStart();
         
-        
+        double x;
+        double y;
+        double direction;
+        double power;
 
         // run until the end of the match (driver presses STOP)
         while (opModeIsActive()) {
-            double x = (double)this.gamepad1.left_stick_x;
-            double y = (double)this.gamepad1.left_stick_y;
+            robotOrientation = imu.getRobotYawPitchRollAngles();
+            x = (double)this.gamepad1.left_stick_x;
+            y = (double)this.gamepad1.left_stick_y;
             
             // set direction to the joystick direction minus the robot direction (impliment later)
-            double direction = Math.atan2(y, x);
-            double power;
+            direction = Math.atan2(y, x);
+            Yaw = robotOrientation.getYaw(AngleUnit.RADIANS);
             
+            //Yaw = -Yaw; // These next few lines are all for translating the yaw into the same format as the joystick
+            
+            /*
+            Yaw -= Math.PI/2;
+            if (Yaw < -Math.PI) {
+                Yaw += 2*Math.PI;
+            
+            } else if (Yaw > Math.PI) {
+                Yaw -= 2*Math.PI; 
+            }
+            */
+            relativeDirection = direction-Yaw;
+            if (relativeDirection < -Math.PI) {
+                relativeDirection += 2*Math.PI;
+            } else if (relativeDirection > Math.PI) {
+                relativeDirection -= 2*Math.PI;
+            }
+            
+            
+    
+    
             if(this.gamepad1.x) {
                 power = Math.sqrt(x*x+y*y) * 1.5; // this is if we need to go fast
             } else {
                 power = Math.sqrt(x*x+y*y) * 0.5; // this is without the button, so it moves a little slower for precision
             }
             
+            if(this.gamepad1.start && this.gamepad1.dpad_up) {
+                imu.resetYaw();
+            }
             
-            telemetry.addData("Direction", String.valueOf(direction));
+            telemetry.addData("Joystick Direction", String.valueOf(direction));
+            telemetry.addData("Yaw", String.valueOf(Yaw));
+            telemetry.addData("Relative Direction", String.valueOf(relativeDirection));
             telemetry.addData("Power", String.valueOf(power));
-            //telemetry.addData("IMU", String.valueOf(imu.getRobotYawPitchRollAngles()));
-            telemetry.addData("IMU 2 Electric Boogaloo", String.valueOf(imu.getAngularOrientation(AxesReference.INTRINSIC, AxesOrder.ZYX, AngleUnit.DEGREES)));
             
             
-            driveInDirection(direction, power, (double)this.gamepad1.right_stick_x);
+            
+            
+            driveInDirection(relativeDirection, power, (double)this.gamepad1.right_stick_x);
             
             telemetry.addData("Status", "Running");
             telemetry.update();
 
         }
     }
-    private double getAngle(){
-    
-        Orientation angles = imu.getAngularOrientation(AxesReference.INTRINSIC, AxesOrder.ZYX, AngleUnit.DEGREES);
-        
-        double deltaAngle = angles.firstAngle - lastAngles.firstAngle;
-        
-        if (deltaAngle < -180){
-            deltaAngle += 360;
-        } else if (deltaAngle > 180){
-            deltaAngle -= 360;
-        }    
-        globalAngle += deltaAngle;
-        
-        lastAngles = angles;
-        
-        return globalAngle;
-        
-}
+
     
 }
-
-
-
-
-
-// THIS CODE DOES NOT WORK
+// This is the code that had the IMU, but the IMU keeps killing itself after a while.
